@@ -79,7 +79,7 @@ export const routes: Routes = [
       },
       {
         path: 'plans',
-        loadChildren: () => import('./plans/plans.module').then(m => m.ProductsModule)
+        loadChildren: () => import('./plans/plans.module').then(m => m.PlansModule)
       },
       {
         path: 'users',
