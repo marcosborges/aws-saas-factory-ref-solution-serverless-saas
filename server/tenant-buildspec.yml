@@ -14,6 +14,9 @@ phases:
       - python -m pip install -r requirements.txt 
       - cd ../OrderService
       - python -m pip install -r requirements.txt 
+      - cd ../PlanService
+      - python -m pip install -r requirements.txt 
+
       
 
   pre_build:

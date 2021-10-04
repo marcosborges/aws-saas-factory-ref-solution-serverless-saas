@@ -3,7 +3,7 @@ version = 0.1
 [default.deploy]
 [default.deploy.parameters]
 stack_name = "serverless-saas"
-s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-8tf6bmi4rdcx"
+s3_bucket = "sam-bootstrap-bucket-6731a98a-70dc-4ac9-8745-8d2e87ebd179"
 s3_prefix = "serverless-saas-bootstrap"
 region = "us-west-2"
 confirm_changeset = false

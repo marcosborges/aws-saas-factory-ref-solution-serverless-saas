@@ -1,0 +1,81 @@
+<div class="row">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">
+        <strong>Create new Plan</strong>
+      </div>
+      <div class="card-body">
+        <form [formGroup]="planForm" action="" method="post">
+          
+          <div class="form-group">
+            <label for="nf-name">Name</label>
+            <input
+              type="text"
+              formControlName="name"
+              id="nf-name"
+              name="nf-name"
+              class="form-control"
+              placeholder="Enter plan name.."
+              autocomplete="planname"
+            />
+            <span class="help-block">Please enter the plan name</span>
+          </div>
+
+          
+
+          <div class="form-group">
+            <label for="nf-price">Price</label>
+            <input
+              type="text"
+              formControlName="price"
+              id="nf-price"
+              name="nf-price"
+              class="form-control"
+              placeholder="Enter plan price.."
+              autocomplete="planprice"
+            />
+            <span class="help-block">Please enter plan's price</span>
+          </div>
+
+
+          <div class="form-group">
+            <label for="nf-sku">Sku</label>
+            <input
+              type="text"
+              formControlName="sku"
+              id="nf-sku"
+              name="nf-sku"
+              class="form-control"
+              placeholder="Enter plan sku.."
+              autocomplete="plansku"
+            />
+            <span class="help-block">Please enter plan's sku</span>
+          </div>
+
+          
+          <div class="form-group">
+            <label for="nf-category">Category</label>
+            <select
+              formControlName="category"
+              id="nf-category"
+              name="nf-category"
+              class="form-control">
+              <option disabled>Select Category</option>
+              <option>Choose category</option>
+              <option *ngFor="let category of categories">{{category}}</option>
+            </select>
+            <span class="help-block">Please choose plan's category</span>
+          </div>
+        </form>
+      </div>
+      <div class="card-footer">
+        <button type="edit" (click)="submit()" class="btn btn-sm btn-primary">
+          <i class="fa fa-dot-circle-o"></i> Submit
+        </button>
+        <button type="cancel" (click)="cancel()" class="btn btn-sm btn-secondary">
+          <i class="fa fa-long-arrow-left"></i> Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

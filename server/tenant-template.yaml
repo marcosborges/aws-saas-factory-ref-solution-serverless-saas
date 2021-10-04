@@ -96,6 +96,24 @@ Resources:
         WriteCapacityUnits: 5
       TableName: !Join ['-', [Order, !Ref TenantIdParameter]]  
 
+  PlanTable:
+    Type: AWS::DynamoDB::Table
+    Properties: 
+      AttributeDefinitions:
+        - AttributeName: shardId
+          AttributeType: S          
+        - AttributeName: planId
+          AttributeType: S          
+      KeySchema:
+        - AttributeName: shardId
+          KeyType: HASH  
+        - AttributeName: planId
+          KeyType: RANGE  
+      ProvisionedThroughput: 
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      TableName: !Join ['-', [Plan, !Ref TenantIdParameter]]  
+
   ProductFunctionExecutionRole:
     Type: AWS::IAM::Role     
     Properties:
@@ -575,7 +593,248 @@ Resources:
           Value: !Ref DeleteOrderFunction
         - Name: ExecutedVersion
           Value: !GetAtt DeleteOrderFunction.Version.Version   
-     
+
+  PlanFunctionExecutionRole:
+    Type: AWS::IAM::Role     
+    Properties:
+      RoleName: !Join ['-', [!Ref TenantIdParameter, plan-function-execution-role]]
+      Path: '/'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy    
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+      Policies:
+        - PolicyName: !Join ['-', [!Ref TenantIdParameter, plan-function-policy]]
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:              
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:PutItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                Resource:
+                  - !GetAtt PlanTable.Arn
+             
+  GetPlanFunction:
+    Type: AWS::Serverless::Function 
+    DependsOn: PlanFunctionExecutionRole 
+    Properties:
+      CodeUri: PlanService/
+      Handler: plan_service.get_plan
+      Runtime: python3.8  
+      Tracing: Active
+      Role: !GetAtt PlanFunctionExecutionRole.Arn
+      ReservedConcurrentExecutions: !If [IsPooledDeploy, !Ref "AWS::NoValue" , !Ref LambdaReserveConcurrency]
+      Layers: 
+        - !Ref ServerlessSaaSLayers
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: "PlanService"
+          IS_POOLED_DEPLOY: !If [IsPooledDeploy, true, false]  
+          PRODUCT_TABLE_NAME: !Ref PlanTable
+      AutoPublishAlias: live
+      DeploymentPreference:
+        Enabled: !Ref LambdaCanaryDeploymentPreference
+        Type: Canary10Percent5Minutes
+        Alarms:
+          - !Ref GetPlanFunctionCanaryErrorsAlarm
+  GetPlanFunctionCanaryErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Lambda function canary errors
+      ComparisonOperator: GreaterThanThreshold
+      EvaluationPeriods: 2
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Period: 60
+      Statistic: Sum
+      Threshold: 0
+      Dimensions:
+        - Name: Resource
+          Value: !Sub "${GetPlanFunction}:live"
+        - Name: FunctionName
+          Value: !Ref GetPlanFunction
+        - Name: ExecutedVersion
+          Value: !GetAtt GetPlanFunction.Version.Version    
+  
+  GetPlansFunction:
+    Type: AWS::Serverless::Function 
+    DependsOn: PlanFunctionExecutionRole 
+    Properties:
+      CodeUri: PlanService/
+      Handler: plan_service.get_plans
+      Runtime: python3.8  
+      Tracing: Active
+      Role: !GetAtt PlanFunctionExecutionRole.Arn
+      ReservedConcurrentExecutions: !If [IsPooledDeploy, !Ref "AWS::NoValue" , !Ref LambdaReserveConcurrency]
+      Layers: 
+        - !Ref ServerlessSaaSLayers
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: "PlanService"
+          IS_POOLED_DEPLOY: !If [IsPooledDeploy, true, false]        
+          PRODUCT_TABLE_NAME: !Ref PlanTable
+      AutoPublishAlias: live
+      DeploymentPreference:
+        Enabled: !Ref LambdaCanaryDeploymentPreference
+        Type: Canary10Percent5Minutes
+        Alarms:
+          - !Ref GetPlansFunctionCanaryErrorsAlarm
+  GetPlansFunctionCanaryErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Lambda function canary errors
+      ComparisonOperator: GreaterThanThreshold
+      EvaluationPeriods: 2
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Period: 60
+      Statistic: Sum
+      Threshold: 0
+      Dimensions:
+        - Name: Resource
+          Value: !Sub "${GetPlansFunction}:live"
+        - Name: FunctionName
+          Value: !Ref GetPlansFunction
+        - Name: ExecutedVersion
+          Value: !GetAtt GetPlansFunction.Version.Version    
+
+  CreatePlanFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: PlanFunctionExecutionRole 
+    Properties:
+      CodeUri: PlanService/
+      Handler: plan_service.create_plan
+      Runtime: python3.8  
+      Tracing: Active 
+      Role: !GetAtt PlanFunctionExecutionRole.Arn 
+      Layers: 
+        - !Ref ServerlessSaaSLayers
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: "PlanService"
+          IS_POOLED_DEPLOY: !If [IsPooledDeploy, true, false]   
+          PRODUCT_TABLE_NAME: !Ref PlanTable
+      AutoPublishAlias: live
+      DeploymentPreference:
+        Enabled: !Ref LambdaCanaryDeploymentPreference
+        Type: Canary10Percent5Minutes
+        Alarms:
+          - !Ref CreatePlanFunctionCanaryErrorsAlarm
+  CreatePlanFunctionCanaryErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Lambda function canary errors
+      ComparisonOperator: GreaterThanThreshold
+      EvaluationPeriods: 2
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Period: 60
+      Statistic: Sum
+      Threshold: 0
+      Dimensions:
+        - Name: Resource
+          Value: !Sub "${CreatePlanFunction}:live"
+        - Name: FunctionName
+          Value: !Ref CreatePlanFunction
+        - Name: ExecutedVersion
+          Value: !GetAtt CreatePlanFunction.Version.Version    
+
+  UpdatePlanFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: PlanFunctionExecutionRole 
+    Properties:
+      CodeUri: PlanService/
+      Handler: plan_service.update_plan
+      Runtime: python3.8 
+      Tracing: Active
+      Role: !GetAtt PlanFunctionExecutionRole.Arn 
+      Layers: 
+        - !Ref ServerlessSaaSLayers
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: "PlanService"
+          IS_POOLED_DEPLOY: !If [IsPooledDeploy, true, false]  
+          PRODUCT_TABLE_NAME: !Ref PlanTable
+      AutoPublishAlias: live
+      DeploymentPreference:
+        Enabled: !Ref LambdaCanaryDeploymentPreference
+        Type: Canary10Percent5Minutes
+        Alarms:
+          - !Ref UpdatePlanFunctionCanaryErrorsAlarm
+  UpdatePlanFunctionCanaryErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Lambda function canary errors
+      ComparisonOperator: GreaterThanThreshold
+      EvaluationPeriods: 2
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Period: 60
+      Statistic: Sum
+      Threshold: 0
+      Dimensions:
+        - Name: Resource
+          Value: !Sub "${UpdatePlanFunction}:live"
+        - Name: FunctionName
+          Value: !Ref UpdatePlanFunction
+        - Name: ExecutedVersion
+          Value: !GetAtt UpdatePlanFunction.Version.Version    
+
+  DeletePlanFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: PlanFunctionExecutionRole 
+    Properties:
+      CodeUri: PlanService/
+      Handler: plan_service.delete_plan
+      Runtime: python3.8 
+      Tracing: Active
+      Role: !GetAtt PlanFunctionExecutionRole.Arn 
+      Layers: 
+        - !Ref ServerlessSaaSLayers
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: "PlanService"
+          IS_POOLED_DEPLOY: !If [IsPooledDeploy, true, false]        
+          PRODUCT_TABLE_NAME: !Ref PlanTable
+      AutoPublishAlias: live
+      DeploymentPreference:
+        Enabled: !Ref LambdaCanaryDeploymentPreference
+        Type: Canary10Percent5Minutes
+        Alarms:
+          - !Ref DeletePlanFunctionCanaryErrorsAlarm
+  DeletePlanFunctionCanaryErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Lambda function canary errors
+      ComparisonOperator: GreaterThanThreshold
+      EvaluationPeriods: 2
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Period: 60
+      Statistic: Sum
+      Threshold: 0
+      Dimensions:
+        - Name: Resource
+          Value: !Sub "${DeletePlanFunction}:live"
+        - Name: FunctionName
+          Value: !Ref DeletePlanFunction
+        - Name: ExecutedVersion
+          Value: !GetAtt DeletePlanFunction.Version.Version    
+  
+
   
   ApiGatewayAccessLogs:
     Type: AWS::Logs::LogGroup
@@ -1005,7 +1264,6 @@ Resources:
           !Ref ApiGatewayTenantApi, "/*/*/*"
           ]
         ] 
-      
   GetProductLambdaApiGatewayExecutionPermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -1070,7 +1328,8 @@ Resources:
           !Ref ApiGatewayTenantApi, "/*/*/*"
           ]
         ]  
-  
+
+
   GetOrdersLambdaApiGatewayExecutionPermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -1087,7 +1346,6 @@ Resources:
           !Ref ApiGatewayTenantApi, "/*/*/*"
           ]
         ]      
-
   GetOrderLambdaApiGatewayExecutionPermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -1153,6 +1411,87 @@ Resources:
           ]
         ]            
 
+
+  GetPlansLambdaApiGatewayExecutionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt GetPlansFunction.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Join [
+        "", [
+          "arn:aws:execute-api:", 
+          {"Ref": "AWS::Region"}, ":", 
+          {"Ref": "AWS::AccountId"}, ":", 
+          !Ref ApiGatewayTenantApi, "/*/*/*"
+          ]
+        ] 
+  GetPlanLambdaApiGatewayExecutionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt 
+        - GetPlanFunction
+        - Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Join [
+        "", [
+          "arn:aws:execute-api:", 
+          {"Ref": "AWS::Region"}, ":", 
+          {"Ref": "AWS::AccountId"}, ":", 
+          !Ref ApiGatewayTenantApi, "/*/*/*"
+          ]
+        ]  
+  CreatePlanLambdaApiGatewayExecutionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt 
+        - CreatePlanFunction
+        - Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Join [
+        "", [
+          "arn:aws:execute-api:", 
+          {"Ref": "AWS::Region"}, ":", 
+          {"Ref": "AWS::AccountId"}, ":", 
+          !Ref ApiGatewayTenantApi, "/*/*/*"
+          ]
+        ]    
+  UpdatePlanLambdaApiGatewayExecutionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt 
+        - UpdatePlanFunction
+        - Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Join [
+        "", [
+          "arn:aws:execute-api:", 
+          {"Ref": "AWS::Region"}, ":", 
+          {"Ref": "AWS::AccountId"}, ":", 
+          !Ref ApiGatewayTenantApi, "/*/*/*"
+          ]
+        ]         
+  DeletePlanLambdaApiGatewayExecutionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt 
+        - DeletePlanFunction
+        - Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Join [
+        "", [
+          "arn:aws:execute-api:", 
+          {"Ref": "AWS::Region"}, ":", 
+          {"Ref": "AWS::AccountId"}, ":", 
+          !Ref ApiGatewayTenantApi, "/*/*/*"
+          ]
+        ]  
+
+  
   AuthorizerLambdaApiGatewayExecutionPermission:
     Type: AWS::Lambda::Permission
     Properties:
